@@ -45,5 +45,4 @@ while (True):
 		next
 	elif (parsed_html.find(id="finish")):
 		print (parsed_html.find(id="finish").text)
-		exit(1)
-
+		exit(0)
