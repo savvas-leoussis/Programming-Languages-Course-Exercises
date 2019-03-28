@@ -76,5 +76,4 @@ ex2 = Cseq (Cassign "x" (makeN 42))
             (Cwhile (Blt Nzero (Nvar "x"))
               (Cseq (Cassign "x" (Npred (Nvar "x")))
                     (Cassign "result" (Nsucc (Nvar "result"))))))
-
 fix f = f (fix f)

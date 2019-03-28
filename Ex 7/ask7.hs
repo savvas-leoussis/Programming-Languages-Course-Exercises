@@ -1,8 +1,7 @@
 import Data.Char
 import Text.Read
 import Text.Read.Lex
-import GHC.Exts
-import Data.Typeable
+
 -- Syntax
 
 type Var = String
@@ -14,57 +13,59 @@ data E = Ezero | Esucc E | Epred E | Eif E E E | Evar Var
 
 -- semantic domains
 
-data Data = Integer | Bool | Cell
-type N = Var -> Integer
-type B = Var -> Bool
-type Cell = Var -> (Data,Data)
+data Data = Data_Int Integer | Data_Bool Bool | Cell (Data, Data) | Null
+type S    = (Var, Data) -> Data
 
 -- semantic functions
 
 semC :: C -> S -> S
 semC Cskip s = s
-semC (Cassign x n) s = update s x (semN n s)
+semC (Cassign x n) s = Main.update s (x, Null) (semE n s)
 semC (Cseq c1 c2) s = semC c2 (semC c1 s)
-semC (Cfor n c) s = expon i (semC c) s
- where i = semN n s
-semC (Cif b c1 c2) s | semB b s  = semC c1 s
-                    | otherwise = semC c2 s
-semC (Cwhile b c) s = fix bigF s
- where bigF f s | semB b s  = f (semC c s)
-                | otherwise = s
+semC (Cfor e c) s = expon i (semC c) s
+  where i = toInt (semE e s)
+semC (Cif e c1 c2) s | b         = semC c1 s
+                     | otherwise = semC c2 s
+  where Data_Bool b = semE e s
+semC (Cwhile e c) s = fix bigF s
+  where bigF f s | toBool (semE e s) = f (semC c s)
+                 | otherwise = s
 
-semN :: E -> S -> Integer
-semN Ezero s = 0
-semN (Esucc n) s = semN n s + 1
-semN (Epred n) s = semN n s - 1
-semN (Eif b n1 n2) s | semB b s  = semN n1 s
-                     | otherwise = semN n2 s
-semN (Evar x) s = s x
-semN (Ehd n) s = fst (semCell n s)
-semN (Etl n) s = snd (semCell n s)
-
-semB :: E -> S -> Bool
-semB Etrue s = True
-semB Efalse s = False
-semB (Elt n1 n2) s = semN n1 s < semN n2 s
-semB (Eeq n1 n2) s = semN n1 s == semN n2 s
-semB (Enot b) s = not (semB b s)
-
-semCell :: E -> S -> (Integer,Integer)
-semCell (Econs n1 n2) s = (semN n1 s,semN n2 s)
+semE :: E -> S -> Data
+semE Ezero s = Data_Int 0
+semE (Esucc e) s = let Data_Int n = semE e s in Data_Int (n + 1)
+semE (Epred e) s = let Data_Int n = semE e s in Data_Int (n - 1)
+semE (Eif e1 e2 e3) s | b         = semE e2 s
+                      | otherwise = semE e3 s
+  where Data_Bool b = semE e1 s
+semE (Evar v) s = s (v, Null)
+semE Etrue s = Data_Bool True
+semE Efalse s = Data_Bool False
+semE (Elt e1 e2) s = Data_Bool (toInt (semE e1 s) < toInt (semE e2 s))
+semE (Eeq e1 e2) s = Data_Bool (toInt (semE e1 s) == toInt (semE e2 s))
+semE (Enot e) s = let Data_Bool b = semE e s in Data_Bool (not b)
+semE (Econs e1 e2) s = Cell ((semE e1 s), (semE e2 s))
+semE (Ehd (Econs e1 e2)) s = semE e1 s
+semE (Etl (Econs e1 e2)) s = semE e2 s
 
 -- auxiliary functions
+
+  -- Convert from Data to Integer
+toInt (Data_Int n) = n
+toInt (Data_Bool b) = toInteger (fromEnum b)
+toInt (Cell (n1, n2)) = read (show (toInt n1) ++ show (toInt n2)) :: Integer
+
+  -- Convert from Data to Bool
+toBool (Data_Bool b) = b
 
 expon 0 f = id
 expon n f = f . expon (n-1) f
 
-update s x n y | x == y    = n
-               | otherwise = s y
-
-update_B s x n y | x == y = n
-                 | otherwise = s y
+update s (v1, d1) n (v2, d2) | v1 == v2  = n
+                             | otherwise = s (v2, d2)
 
 fix f = f (fix f)
+
 -- Pretty-printing
 
 instance Show E where
@@ -113,6 +114,14 @@ instance Show C where
   showsPrec p (Cwhile e c) =
     showParen (p > 1) $
     ("while " ++) . showsPrec 1 e . (" do " ++) . showsPrec 1 c
+
+boolToString True = "true"
+boolToString False = "false"
+
+instance Show Data where
+  showsPrec p (Data_Int n) = showsPrec p n
+  showsPrec p (Data_Bool b) = (boolToString b ++)
+  showsPrec p (Cell (c1, c2)) = showsPrec p c1 . (" : " ++) . showsPrec p c2
 
 -- Parsing
 
@@ -223,12 +232,11 @@ instance Read C where
 
 -- Main function: parsing a statement and pretty-printing
 
-s0 x = error ("not initialized variable " ++ x)
+s0 (x, Null) = error ("not initialized variable " ++ x)
 
-run c = print (semC c s0 "result")
+run c = print (semC c s0 ("result", Null))
 
 main = do  input <- getContents
            let c :: C
                c = read input
-           print c
-           -- run c
+           run c
