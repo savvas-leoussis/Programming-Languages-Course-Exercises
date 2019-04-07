@@ -13,14 +13,14 @@ data E = Ezero | Esucc E | Epred E | Eif E E E | Evar Var
 
 -- semantic domains
 
-data Data = Data_Int Integer | Data_Bool Bool | Cell (Data, Data) | Null
+data Data = Data_Int Integer | Data_Bool Bool | Data_Cell (Data, Data) | Null
 type S    = (Var, Data) -> Data
 
 -- semantic functions
 
 semC :: C -> S -> S
 semC Cskip s = s
-semC (Cassign x n) s = Main.update s (x, Null) (semE n s)
+semC (Cassign v n) s = Main.update s (v, Null) (semE n s)
 semC (Cseq c1 c2) s = semC c2 (semC c1 s)
 semC (Cfor e c) s = expon i (semC c) s
   where i = toInt (semE e s)
@@ -44,16 +44,21 @@ semE Efalse s = Data_Bool False
 semE (Elt e1 e2) s = Data_Bool (toInt (semE e1 s) < toInt (semE e2 s))
 semE (Eeq e1 e2) s = Data_Bool (toInt (semE e1 s) == toInt (semE e2 s))
 semE (Enot e) s = let Data_Bool b = semE e s in Data_Bool (not b)
-semE (Econs e1 e2) s = Cell ((semE e1 s), (semE e2 s))
-semE (Ehd (Econs e1 e2)) s = semE e1 s
-semE (Etl (Econs e1 e2)) s = semE e2 s
-
+semE (Econs e1 e2) s = Data_Cell ((semE e1 s), (semE e2 s))
+semE (Ehd e) s =
+  case e of
+    (Econs e1 e2)  -> semE e1 s
+    undefined -> semE undefined s
+semE (Etl e) s =
+  case e of
+    (Econs e1 e2)  -> semE e2 s
+    undefined -> semE undefined s
 -- auxiliary functions
 
   -- Convert from Data to Integer
 toInt (Data_Int n) = n
 toInt (Data_Bool b) = toInteger (fromEnum b)
-toInt (Cell (n1, n2)) = read (show (toInt n1) ++ show (toInt n2)) :: Integer
+toInt (Data_Cell (n1, n2)) = read (show (toInt n1) ++ show (toInt n2)) :: Integer
 
   -- Convert from Data to Bool
 toBool (Data_Bool b) = b
@@ -121,7 +126,7 @@ boolToString False = "false"
 instance Show Data where
   showsPrec p (Data_Int n) = showsPrec p n
   showsPrec p (Data_Bool b) = (boolToString b ++)
-  showsPrec p (Cell (c1, c2)) = showsPrec p c1 . (" : " ++) . showsPrec p c2
+  showsPrec p (Data_Cell (c1, c2)) = showsPrec p c1 . (" : " ++) . showsPrec p c2
 
 -- Parsing
 
