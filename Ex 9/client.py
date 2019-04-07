@@ -24,7 +24,7 @@ def minimumNumberOfDeletions(string):
 	return n-length
 
 if (len(sys.argv)!=2):
-	print("Please provide the game's URL. Example: \"./client.py http://localhost/palseq.php\"")
+	print("Please provide the game's URL. Example: \"python client.py http://localhost/palseq.php\"")
 	exit(1)
 s = requests.Session()
 r = s.get(sys.argv[1])
